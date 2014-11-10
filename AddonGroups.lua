@@ -1,13 +1,87 @@
 local addonName, addon, _ = ...
+LibStub('AceEvent-3.0'):Embed(addon)
+
+local emptyTable = {}
+local noGroupsText = _G.GRAY_FONT_COLOR_CODE..'- no groups -'
+
+local groups = {}
+local function AddMetadataProperty(checkAddon, property, useTable)
+	local value = GetAddOnMetadata(checkAddon, property)
+	      value = value and string.trim(value)
+	if value and value ~= '' then
+		for entry in value:gmatch("[^,%s][^,]*") do
+			if not tContains(useTable or groups, entry) then
+				table.insert(useTable or groups, entry)
+			end
+		end
+	end
+end
+local function GetAddonGroups(checkAddon, includeMetadata, excludeCustom)
+	if type(checkAddon) == 'number' then
+		-- @see http://wowprogramming.com/docs/api/GetAddOnInfo
+		checkAddon = GetAddOnInfo(checkAddon)
+	end
+
+	wipe(groups)
+	if includeMetadata == true then
+		-- add all relevant metadata
+		AddMetadataProperty(checkAddon, 'Author')
+		AddMetadataProperty(checkAddon, 'X-Category')
+	elseif includeMetadata then
+		-- only add specific metadata
+		AddMetadataProperty(checkAddon, includeMetadata)
+	end
+	if not excludeCustom then
+		for _, group in ipairs(addon.db[checkAddon] or emptyTable) do
+			if not tContains(groups, group) then
+				table.insert(groups, group)
+			end
+		end
+	end
+	return groups
+end
 
 local function ShowInputBox(owner, btn, up)
-	-- TODO: hide current tags
-	-- owner: an entry's tags button
-	local addonIndex = owner:GetParent():GetID()
+	local entry   = owner:GetParent()
 	local editbox = addon.editbox
+	editbox:SetParent(entry)
 	editbox:SetAllPoints(owner)
-	editbox:SetText(owner:GetText())
+	local groupsText = owner:GetText()
+	editbox:SetText(groupsText ~= noGroupsText and groupsText or '')
 	editbox:Show()
+	owner:Hide()
+end
+
+local function OnEnterPressed(self)
+	local entry      = self:GetParent()
+	local groupsText = self:GetText()
+	      groupsText = string.trim(groupsText)
+
+	-- clear old data
+	local checkAddon = GetAddOnInfo(entry:GetID())
+	if not addon.db[checkAddon] then addon.db[checkAddon] = {} end
+	wipe(addon.db[checkAddon])
+	-- add new data
+	local groups = GetAddonGroups(checkAddon, 'X-Category', true)
+	for group in groupsText:gmatch("[^,%s][^,]*") do
+		-- prevent duplicates
+		if not tContains(groups, group) and not tContains(addon.db[checkAddon], group) then
+			table.insert(addon.db[checkAddon], group)
+		end
+	end
+	if #addon.db[checkAddon] == 0 then
+		addon.db[checkAddon] = nil
+	end
+
+	local owner = entry.Groups
+	owner:SetText(groupsText ~= '' and groupsText or noGroupsText)
+	owner:Show()
+	self:ClearFocus()
+end
+
+local function OnEscapePressed(self)
+	self:GetParent().Groups:Show()
+	self:ClearFocus()
 end
 
 local function InitializeAddonList()
@@ -17,8 +91,8 @@ local function InitializeAddonList()
 	      editbox:SetAutoFocus(true)
 	      editbox:SetFontObject('GameFontHighlightSmall')
 	      editbox:SetFrameStrata('DIALOG')
-	editbox:SetScript('OnEscapePressed', editbox.ClearFocus)
-	editbox:SetScript('OnEnterPressed',  editbox.ClearFocus)
+	editbox:SetScript('OnEscapePressed', OnEscapePressed)
+	editbox:SetScript('OnEnterPressed',  OnEnterPressed)
 	editbox:SetScript('OnEditFocusLost', editbox.Hide)
 	addon.editbox = editbox
 
@@ -34,22 +108,24 @@ local function InitializeAddonList()
 		entry.LoadAddonButton:ClearAllPoints()
 		entry.LoadAddonButton:SetPoint('LEFT', '$parentTitle', 'RIGHT', 6, 0)
 		entry.Reload:SetWidth(26)
+		entry.Reload:SetJustifyH('CENTER')
 		entry.Reload:ClearAllPoints()
 		entry.Reload:SetPoint('LEFT', '$parentTitle', 'RIGHT', 6, 0)
 		entry.Status:SetWidth(26)
+		entry.Status:SetJustifyH('CENTER')
 		entry.Status:ClearAllPoints()
 		entry.Status:SetPoint('LEFT', '$parentTitle', 'RIGHT', 6, 0)
 
 		-- display our data as well as allow changing it
-		local tags = CreateFrame('Button', nil, entry)
-		      tags:SetSize(170, 12)
-		      tags:SetPoint('LEFT', '$parentStatus', 'RIGHT', 6, 0)
-		local fontString = tags:GetFontString() or tags:CreateFontString(nil, nil, 'GameFontNormalSmall')
+		local groupsBtn = CreateFrame('Button', '$parentGroups', entry, 'TruncatedButtonTemplate')
+		      groupsBtn:SetSize(170, 12+4)
+		      groupsBtn:SetPoint('LEFT', '$parentStatus', 'RIGHT', 6, 0)
+		local fontString = groupsBtn:CreateFontString('$parentText', nil, 'GameFontNormalSmall')
 		      fontString:SetJustifyH('LEFT')
-		      fontString:SetAllPoints(tags)
-		tags:SetFontString(fontString)
-		tags:SetScript('OnClick', ShowInputBox)
-		entry.Tags = tags
+		      fontString:SetAllPoints(groupsBtn)
+		groupsBtn:SetFontString(fontString)
+		groupsBtn:SetScript('OnClick', ShowInputBox)
+		entry.Groups = groupsBtn
 	end
 end
 
@@ -58,16 +134,8 @@ local function UpdateAddonList()
 		local addonIndex = index + AddonList.offset
 		local entry = _G['AddonListEntry'..index]
 
-		-- local ... = GetAddOnDependencies(addonIndex)
-		-- local ... = GetAddOnOptionalDependencies(addonIndex)
-		-- @see http://wowprogramming.com/docs/api/GetAddOnInfo
-		-- local name, title, notes, enabled, loadable, notLoadedReason, security = GetAddOnInfo(addonIndex)
-		-- @see http://wowpedia.org/TOC_format
-		-- local author   = GetAddOnMetadata(addonIndex, 'Author')
-
-		local groups = _G.GRAY_FONT_COLOR_CODE..'- no groups -'
-		-- TODO: read tags and display
-		entry.Tags:SetText(groups)
+		local groups = GetAddonGroups(addonIndex, 'X-Category')
+		entry.Groups:SetText(#groups > 0 and table.concat(groups, ', ') or noGroupsText)
 	end
 end
 
@@ -78,27 +146,38 @@ local function UpdateAddonTooltip(owner)
 	local r, g, b = owner.Status:GetTextColor()
 	tooltip:AddLine(owner.Status:GetText(), r, g, b)
 
-	local author   = GetAddOnMetadata(addonIndex, 'Author')
-	local category = GetAddOnMetadata(addonIndex, 'X-Category')
-	local date     = GetAddOnMetadata(addonIndex, 'X-Date')
-	local website  = GetAddOnMetadata(addonIndex, 'X-Website')
-	local feedback = GetAddOnMetadata(addonIndex, 'X-Feedback')
-
 	-- tooltip:AddLine(' ')
 	-- tooltip:AddLine(strjoin('|n', category or '', author or '', date or '', website or '', feedback or ''), nil, nil, nil, true)
 end
 
-local function OnDropDownClick(self)
-	-- TODO: enable/disable via AddonList_Enable(addonIndex, isEnabled) or EnableAddon(addonIndex, character) -- true for all
-	-- UIDropDownMenu_SetSelectedValue(AddonGroupDropDown, self.value)
+local function OnDropDownClick(info, menuList, value)
+	if not menuList or not value then return end
+	-- UIDropDownMenu_SetSelectedValue(AddonGroupDropDown, info.value)
+	local isChecked = info.checked
+	local character = UIDropDownMenu_GetSelectedValue(AddonCharacterDropDown)
+
+	for addonIndex = 1, GetNumAddOns() do
+		-- TODO: do we want to toggle 'X-Category' when custom group w/ same name is toggled?
+		local groups = GetAddonGroups(addonIndex, menuList ~= 'custom', menuList ~= 'custom')
+		if tContains(groups, value) then
+			if isChecked then
+				PlaySound('igMainMenuOptionCheckBoxOn')
+				EnableAddOn(addonIndex, character)
+			else
+				PlaySound('igMainMenuOptionCheckBoxOff')
+				DisableAddOn(addonIndex, character)
+			end
+		end
+	end
+	AddonList_Update()
 end
 
-local data = {
+local data = { -- @see http://wowpedia.org/TOC_format
 	['Author'] = {},
 	['X-Category'] = {},
+	custom = {},
 }
--- ignore capitalization
-local function SortValues(a, b) return a:lower() < b:lower() end
+local function SortValues(a, b) return a:lower() < b:lower() end -- ignore capitalization
 local function InitializeDropdown(self, level, menuList)
 	local info = UIDropDownMenu_CreateInfo()
 	      info.func = OnDropDownClick
@@ -109,43 +188,57 @@ local function InitializeDropdown(self, level, menuList)
 		info.hasArrow = true
 		info.notCheckable = true
 
+		-- TODO: in theory, we'd only need to do this when player changes groups
 		for property, values in pairs(data) do wipe(values) end
+		-- load available groups
 		for addonIndex = 1, GetNumAddOns() do
-			for property, values in pairs(data) do
-				local value = GetAddOnMetadata(addonIndex, property)
-				      value = value and string.trim(value)
-				if value and value ~= '' and not tContains(values, value) then
-					table.insert(values, value)
+			local groups = GetAddonGroups(addonIndex)
+			for _, group in pairs(groups) do
+				-- user specified groups
+				if not tContains(data.custom, group) then
+					-- not tContains(data['Author'], group) and not tContains(data['X-Category'], group) then
+					table.insert(data.custom, group)
 				end
+			end
+			for property, values in pairs(data) do
+				-- metadata properties
+				AddMetadataProperty(addonIndex, property, data[property])
 			end
 		end
 
 		-- TODO: localize
 		info.text = 'Author'
-		info.menuList = data['Author']
-		-- info.menuTable = data['Author']
+		info.menuList = 'Author'
 		UIDropDownMenu_AddButton(info, level)
 
-		info.text = 'Category'
-		info.menuList = data['X-Category']
-		-- info.menuTable = data['X-Category']
+		info.text = _G.CATEGORY
+		info.menuList = 'X-Category'
 		UIDropDownMenu_AddButton(info, level)
 
-		-- info.text = 'Tags'
-		-- info.menuList = 'Tags'
-		-- UIDropDownMenu_AddButton(info, level)
-	elseif type(menuList) == 'table' then
+		if #data.custom > 0 then
+			info.text = _G.CHANNEL_CATEGORY_CUSTOM
+			info.menuList = 'custom'
+			UIDropDownMenu_AddButton(info, level)
+		end
+	elseif menuList and data[menuList] then
+		-- TODO: use tristate for all in group enabled/disabled and some
 		info.keepShownOnClick = true
-		table.sort(menuList, SortValues)
-		for _, value in ipairs(menuList) do
+		table.sort(data[menuList], SortValues)
+		for _, value in ipairs(data[menuList]) do
 			info.text  = value
-			info.value = value
+			info.arg1 = menuList
+			info.arg2 = value
 			UIDropDownMenu_AddButton(info, level)
 		end
 	end
 end
 
-local function OnEnable()
+function addon:OnEnable()
+	if not _G[addonName..'DB'] then
+		_G[addonName..'DB'] = {}
+	end
+	self.db = _G[addonName..'DB']
+
 	local legend = _G.AddonList:CreateFontString(nil, nil, 'GameFontNormalSmall')
 	      legend:SetText('* requires reload')
 	      legend:SetTextColor(255, 0, 0)
@@ -162,5 +255,8 @@ local function OnEnable()
 	hooksecurefunc('AddonTooltip_Update', UpdateAddonTooltip)
 end
 
--- for now we don't care about saved vars
-OnEnable()
+addon:RegisterEvent('ADDON_LOADED', function(self, event, arg1)
+	if arg1 ~= addonName then return end
+	self:UnregisterEvent('ADDON_LOADED')
+	self:OnEnable()
+end, addon)

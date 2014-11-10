@@ -4,7 +4,7 @@
 ## Notes: Intuitive addon management using tag groups
 ## Version: dev
 ## Dependencies:
-# SavedVariables: AddonGroupsDB
+## SavedVariables: AddonGroupsDB
 
 #@no-lib-strip@
 # libraries
