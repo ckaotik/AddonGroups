@@ -8,8 +8,7 @@
 
 #@no-lib-strip@
 # libraries
-libs\LibStub\LibStub.lua
-libs\LibButtonFacade-1.0\LibButtonFacade-1.0.lua
+# libs\LibStub\LibStub.lua
 #@end-no-lib-strip@
 libs\LibOptionsGenerate-1.0.lua
 
