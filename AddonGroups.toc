@@ -1,0 +1,17 @@
+## Interface: 60000
+## Author: ckaotik
+## Title: Addon Groups
+## Notes: Intuitive addon management using tag groups
+## Version: dev
+## Dependencies:
+# SavedVariables: AddonGroupsDB
+
+#@no-lib-strip@
+# libraries
+libs\LibStub\LibStub.lua
+libs\LibButtonFacade-1.0\LibButtonFacade-1.0.lua
+#@end-no-lib-strip@
+libs\LibOptionsGenerate-1.0.lua
+
+AddonGroups.lua
+# config.lua
