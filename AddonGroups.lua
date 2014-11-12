@@ -17,6 +17,7 @@ local function AddMetadataProperty(checkAddon, property, useTable)
 		end
 	end
 end
+
 local function GetAddonGroups(checkAddon, includeMetadata, excludeCustom)
 	if type(checkAddon) == 'number' then
 		-- @see http://wowprogramming.com/docs/api/GetAddOnInfo
@@ -40,6 +41,31 @@ local function GetAddonGroups(checkAddon, includeMetadata, excludeCustom)
 		end
 	end
 	return groups
+end
+
+local data = { -- @see http://wowpedia.org/TOC_format
+	['Author'] = {},
+	['X-Category'] = {},
+	custom = {},
+}
+local function UpdateKnownGroups()
+	for property, values in pairs(data) do wipe(values) end
+	-- load available groups
+	for addonIndex = 1, GetNumAddOns() do
+		for property, values in pairs(data) do
+			-- metadata properties
+			AddMetadataProperty(addonIndex, property, data[property])
+		end
+		local groups = GetAddonGroups(addonIndex)
+		for _, group in pairs(groups) do
+			-- user specified groups
+			if not tContains(data.custom, group) then
+			-- if not tContains(data['X-Category'], group) then
+				table.insert(data.custom, group)
+				-- table.insert(data['X-Category'], group)
+			end
+		end
+	end
 end
 
 local function ShowInputBox(owner, btn, up)
@@ -92,6 +118,13 @@ local function OnEscapePressed(self)
 	self:Hide()
 end
 
+local function OnTabPressed(self)
+	local entry = self:GetParent()
+	local index = entry:GetID() - AddonList.offset
+	local nextEntry = _G['AddonListEntry'..index+1] or _G['AddonListEntry'..1] -- allow for cycling
+	nextEntry.Groups:Click('LeftButton', true)
+end
+
 local function InitializeAddonList()
 	-- TODO: autocomplete!
 	local editbox = CreateFrame('EditBox', nil, _G.AddonList)
@@ -100,7 +133,8 @@ local function InitializeAddonList()
 	      editbox:SetFontObject('GameFontHighlightSmall')
 	      editbox:SetFrameStrata('DIALOG')
 	editbox:SetScript('OnEscapePressed', OnEscapePressed)
-	editbox:SetScript('OnEnterPressed',  OnEnterPressed)
+	editbox:SetScript('OnEnterPressed', OnEnterPressed)
+	editbox:SetScript('OnTabPressed', OnTabPressed)
 	addon.editbox = editbox
 
 	for index = 1, _G.MAX_ADDONS_DISPLAYED do
@@ -142,7 +176,12 @@ local function UpdateAddonList()
 		local entry = _G['AddonListEntry'..index]
 
 		local groups = GetAddonGroups(addonIndex, 'X-Category')
-		entry.Groups:SetText(#groups > 0 and table.concat(groups, ', ') or noGroupsText)
+		if #groups > 0 then
+			-- TODO: colorize custom/addon groups
+			entry.Groups:SetText(table.concat(groups, ', '))
+		else
+			entry.Groups:SetText(noGroupsText)
+		end
 	end
 end
 
@@ -182,31 +221,6 @@ local function OnDropDownClick(info, menuList, value)
 	AddonList_Update()
 end
 
-local data = { -- @see http://wowpedia.org/TOC_format
-	['Author'] = {},
-	['X-Category'] = {},
-	custom = {},
-}
-local function UpdateKnownGroups()
-	for property, values in pairs(data) do wipe(values) end
-	-- load available groups
-	for addonIndex = 1, GetNumAddOns() do
-		for property, values in pairs(data) do
-			-- metadata properties
-			AddMetadataProperty(addonIndex, property, data[property])
-		end
-		local groups = GetAddonGroups(addonIndex)
-		for _, group in pairs(groups) do
-			-- user specified groups
-			if not tContains(data.custom, group) then
-			-- if not tContains(data['X-Category'], group) then
-				table.insert(data.custom, group)
-				-- table.insert(data['X-Category'], group)
-			end
-		end
-	end
-end
-
 local function SortValues(a, b) return a:lower() < b:lower() end -- ignore capitalization
 local function InitializeDropdown(self, level, menuList)
 	local info = UIDropDownMenu_CreateInfo()
@@ -221,11 +235,6 @@ local function InitializeDropdown(self, level, menuList)
 		-- TODO: in theory, we'd only need to do this when player changes groups
 		UpdateKnownGroups()
 
-		-- TODO: localize
-		info.text = 'Author'
-		info.menuList = 'Author'
-		UIDropDownMenu_AddButton(info, level)
-
 		info.text = _G.CATEGORY
 		info.menuList = 'X-Category'
 		UIDropDownMenu_AddButton(info, level)
@@ -235,6 +244,10 @@ local function InitializeDropdown(self, level, menuList)
 			info.menuList = 'custom'
 			UIDropDownMenu_AddButton(info, level)
 		end
+
+		info.text = 'Author' -- TODO: localize
+		info.menuList = 'Author'
+		UIDropDownMenu_AddButton(info, level)
 	elseif menuList and data[menuList] then
 		-- TODO: use tristate for all/some in group enabled/disabled
 		info.keepShownOnClick = true
