@@ -77,11 +77,13 @@ local function OnEnterPressed(self)
 	owner:SetText(groupsText ~= '' and groupsText or noGroupsText)
 	owner:Show()
 	self:ClearFocus()
+	self:Hide()
 end
 
 local function OnEscapePressed(self)
 	self:GetParent().Groups:Show()
 	self:ClearFocus()
+	self:Hide()
 end
 
 local function InitializeAddonList()
@@ -93,7 +95,7 @@ local function InitializeAddonList()
 	      editbox:SetFrameStrata('DIALOG')
 	editbox:SetScript('OnEscapePressed', OnEscapePressed)
 	editbox:SetScript('OnEnterPressed',  OnEnterPressed)
-	editbox:SetScript('OnEditFocusLost', editbox.Hide)
+	editbox:SetScript('OnEditFocusLost', OnEscapePressed)
 	addon.editbox = editbox
 
 	for index = 1, _G.MAX_ADDONS_DISPLAYED do
