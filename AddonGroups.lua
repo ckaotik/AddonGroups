@@ -121,7 +121,9 @@ end
 local function OnTabPressed(self)
 	local entry = self:GetParent()
 	local index = entry:GetID() - AddonList.offset
-	local nextEntry = _G['AddonListEntry'..index+1] or _G['AddonListEntry'..1] -- allow for cycling
+	local inverse = IsShiftKeyDown()
+	local nextEntry = _G['AddonListEntry'..(inverse and index-1 or index+1)]
+		or _G['AddonListEntry'..(inverse and _G.MAX_ADDONS_DISPLAYED or 1)] -- allow for cycling
 	nextEntry.Groups:Click('LeftButton', true)
 end
 
