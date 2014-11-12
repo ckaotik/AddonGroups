@@ -3,6 +3,7 @@ LibStub('AceEvent-3.0'):Embed(addon)
 
 local emptyTable = {}
 local noGroupsText = _G.GRAY_FONT_COLOR_CODE..'- no groups -'
+local customColor  = _G.BATTLENET_FONT_COLOR_CODE
 
 local groups = {}
 local function AddMetadataProperty(checkAddon, property, useTable)
@@ -44,6 +45,11 @@ end
 local function ShowInputBox(owner, btn, up)
 	local entry   = owner:GetParent()
 	local editbox = addon.editbox
+	if editbox:IsShown() then
+		-- previously shown box is still active
+		editbox:GetScript('OnEscapePressed')(editbox)
+	end
+
 	editbox:SetParent(entry)
 	editbox:SetAllPoints(owner)
 	local groupsText = owner:GetText()
@@ -95,7 +101,6 @@ local function InitializeAddonList()
 	      editbox:SetFrameStrata('DIALOG')
 	editbox:SetScript('OnEscapePressed', OnEscapePressed)
 	editbox:SetScript('OnEnterPressed',  OnEnterPressed)
-	editbox:SetScript('OnEditFocusLost', OnEscapePressed)
 	addon.editbox = editbox
 
 	for index = 1, _G.MAX_ADDONS_DISPLAYED do
@@ -148,6 +153,9 @@ local function UpdateAddonTooltip(owner)
 	local r, g, b = owner.Status:GetTextColor()
 	tooltip:AddLine(owner.Status:GetText(), r, g, b)
 
+	local author = GetAddOnMetadata(addonIndex, 'Author')
+	tooltip:AddLine(('by %s'):format(author or 'unknown'))
+
 	-- tooltip:AddLine(' ')
 	-- tooltip:AddLine(strjoin('|n', category or '', author or '', date or '', website or '', feedback or ''), nil, nil, nil, true)
 end
@@ -179,6 +187,26 @@ local data = { -- @see http://wowpedia.org/TOC_format
 	['X-Category'] = {},
 	custom = {},
 }
+local function UpdateKnownGroups()
+	for property, values in pairs(data) do wipe(values) end
+	-- load available groups
+	for addonIndex = 1, GetNumAddOns() do
+		for property, values in pairs(data) do
+			-- metadata properties
+			AddMetadataProperty(addonIndex, property, data[property])
+		end
+		local groups = GetAddonGroups(addonIndex)
+		for _, group in pairs(groups) do
+			-- user specified groups
+			if not tContains(data.custom, group) then
+			-- if not tContains(data['X-Category'], group) then
+				table.insert(data.custom, group)
+				-- table.insert(data['X-Category'], group)
+			end
+		end
+	end
+end
+
 local function SortValues(a, b) return a:lower() < b:lower() end -- ignore capitalization
 local function InitializeDropdown(self, level, menuList)
 	local info = UIDropDownMenu_CreateInfo()
@@ -191,22 +219,7 @@ local function InitializeDropdown(self, level, menuList)
 		info.notCheckable = true
 
 		-- TODO: in theory, we'd only need to do this when player changes groups
-		for property, values in pairs(data) do wipe(values) end
-		-- load available groups
-		for addonIndex = 1, GetNumAddOns() do
-			local groups = GetAddonGroups(addonIndex)
-			for _, group in pairs(groups) do
-				-- user specified groups
-				if not tContains(data.custom, group) then
-					-- not tContains(data['Author'], group) and not tContains(data['X-Category'], group) then
-					table.insert(data.custom, group)
-				end
-			end
-			for property, values in pairs(data) do
-				-- metadata properties
-				AddMetadataProperty(addonIndex, property, data[property])
-			end
-		end
+		UpdateKnownGroups()
 
 		-- TODO: localize
 		info.text = 'Author'
@@ -223,11 +236,11 @@ local function InitializeDropdown(self, level, menuList)
 			UIDropDownMenu_AddButton(info, level)
 		end
 	elseif menuList and data[menuList] then
-		-- TODO: use tristate for all in group enabled/disabled and some
+		-- TODO: use tristate for all/some in group enabled/disabled
 		info.keepShownOnClick = true
 		table.sort(data[menuList], SortValues)
 		for _, value in ipairs(data[menuList]) do
-			info.text  = value
+			info.text = value
 			info.arg1 = menuList
 			info.arg2 = value
 			UIDropDownMenu_AddButton(info, level)
