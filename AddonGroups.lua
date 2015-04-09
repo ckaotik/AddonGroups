@@ -280,6 +280,9 @@ function addon:OnEnable()
 	UIDropDownMenu_SetWidth(dropDown, 120)
 	UIDropDownMenu_SetText(dropDown, 'Addon Groups')
 
+	-- save settings when closing frame
+	AddonListCloseButton:SetScript('OnClick', function(self, btn, up) AddonList_Hide(true) end)
+
 	InitializeAddonList()
 	hooksecurefunc('AddonList_Update', UpdateAddonList)
 	hooksecurefunc('AddonTooltip_Update', UpdateAddonTooltip)
